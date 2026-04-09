@@ -1,0 +1,52 @@
+# 🔥 Ambiente virtual
+venv/
+.env/
+.env.*
+
+# 🔥 Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 🔥 Logs
+*.log
+
+# 🔥 Arquivos temporários
+*.tmp
+*.swp
+*.swo
+
+# 🔥 Sistema operacional
+.DS_Store
+Thumbs.db
+
+# 🔥 VS Code
+.vscode/
+
+# 🔥 Jupyter (caso use depois)
+.ipynb_checkpoints/
+
+# 🔥 Dados (IMPORTANTE pro seu projeto)
+data/uploads/
+
+# 🔥 Modelos treinados (caso você salve depois)
+*.pkl
+*.joblib
+
+# 🔥 Arquivos grandes
+*.csv
+
+# 🔥 Cache de libs
+.cache/
+
+# 🔥 Pytest (se usar depois)
+.pytest_cache/
+
+# 🔥 Coverage
+.coverage
+htmlcov/
+
+# 🔥 Build / dist
+dist/
+build/
