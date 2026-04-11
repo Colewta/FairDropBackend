@@ -2,9 +2,7 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 
-
 POSITIVE_TARGET_LABELS = {"1", "true", "yes", "sim", "positivo", "dropout"}
-
 
 def carregar_dataset(caminho):
     df = pd.read_csv(caminho, sep=None, engine="python")
@@ -114,7 +112,17 @@ def preprocessar(df, target):
     )
 
     scaler = StandardScaler()
-    X_train = scaler.fit_transform(X_train)
-    X_test = scaler.transform(X_test)
+    colunas = X_train.columns
+
+    X_train = pd.DataFrame(
+        scaler.fit_transform(X_train),
+        columns=colunas,
+        index=X_train.index
+    )
+    X_test = pd.DataFrame(
+        scaler.transform(X_test),
+        columns=colunas,
+        index=X_test.index
+    )
 
     return X_train, X_test, y_train, y_test
