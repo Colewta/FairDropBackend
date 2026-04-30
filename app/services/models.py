@@ -1,5 +1,6 @@
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.neighbors import KNeighborsClassifier
 from sklearn.metrics import (
     accuracy_score, precision_score, recall_score,
     f1_score, roc_auc_score, confusion_matrix
@@ -16,6 +17,29 @@ def treinar_modelo(tipo, X, y):
             min_samples_split=5,
             random_state=42
         )
+    
+    elif tipo == "knn":
+        model = KNeighborsClassifier(n_neighbors=min(5, len(X)))
+
+    elif tipo in ("xgboost", "xgb"):
+        try:
+            from xgboost import XGBClassifier
+        except ImportError as exc:
+            raise ValueError(
+                "XGBoost nao esta instalado. Instale a dependencia 'xgboost'."
+            ) from exc
+
+        model = XGBClassifier(
+            n_estimators=100,
+            max_depth=4,
+            learning_rate=0.1,
+            subsample=0.9,
+            colsample_bytree=0.9,
+            eval_metric="logloss",
+            random_state=42,
+            n_jobs=-1
+        )
+
     else:
         raise ValueError("Modelo inválido")
 
