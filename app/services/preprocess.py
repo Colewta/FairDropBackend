@@ -8,6 +8,7 @@ from pandas.errors import EmptyDataError, ParserError
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 
+<<<<<<< HEAD
 
 POSITIVE_TARGET_LABELS = {
     "1", "true", "t", "yes", "y", "sim", "s", "positivo", "positive",
@@ -26,7 +27,9 @@ NORMALIZED_NA_VALUES = set(NA_VALUES)
 CSV_ENCODINGS = ("utf-8", "utf-8-sig", "latin1", "cp1252", "iso-8859-1")
 CSV_SEPARATORS = (None, ",", ";", "\t", "|")
 NATIONALITY_COLUMNS = {"nacionality", "nationality", "nacionalidade"}
-
+=======
+POSITIVE_TARGET_LABELS = {"1", "true", "yes", "sim", "positivo", "dropout"}
+>>>>>>> 14ee90717e59ecdfe7b40d518c7a047aca4aded3
 
 def carregar_dataset(caminho):
     ultimo_erro = None
@@ -356,7 +359,17 @@ def preprocessar(df, target):
     )
 
     scaler = StandardScaler()
-    X_train = scaler.fit_transform(X_train)
-    X_test = scaler.transform(X_test)
+    colunas = X_train.columns
+
+    X_train = pd.DataFrame(
+        scaler.fit_transform(X_train),
+        columns=colunas,
+        index=X_train.index
+    )
+    X_test = pd.DataFrame(
+        scaler.transform(X_test),
+        columns=colunas,
+        index=X_test.index
+    )
 
     return X_train, X_test, y_train, y_test

@@ -13,7 +13,6 @@ def treinar_modelo(tipo, X, y):
     elif tipo == "rf":
         model = RandomForestClassifier(
             n_estimators=100,
-            max_depth=5,
             min_samples_split=5,
             random_state=42
         )
@@ -66,3 +65,25 @@ def avaliar_modelo(model, X, y):
         "roc_auc": roc_auc,
         "confusion_matrix": cm.tolist()
     }, y_pred
+<<<<<<< HEAD
+=======
+    
+def extrair_importancia(model, feature_names):
+    importancias = {}
+
+    # Logistic Regression
+    if hasattr(model, "coef_"):
+        coefs = model.coef_[0]
+        importancias = {
+            feature_names[i]: float(coefs[i])
+            for i in range(len(feature_names))
+        }
+
+    elif hasattr(model, "feature_importances_"):
+        importancias = {
+            feature_names[i]: float(model.feature_importances_[i])
+            for i in range(len(feature_names))
+        }
+
+    return importancias
+>>>>>>> 14ee90717e59ecdfe7b40d518c7a047aca4aded3
