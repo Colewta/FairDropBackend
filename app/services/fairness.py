@@ -1,6 +1,17 @@
+﻿import math
+
 import pandas as pd
 from aif360.datasets import BinaryLabelDataset
 from aif360.metrics import ClassificationMetric
+
+
+def _safe_float(value):
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+
+    return number if math.isfinite(number) else None
 
 
 def avaliar_fairness_aif360(df_original, y_true, y_pred, target, sensitive):
@@ -29,7 +40,7 @@ def avaliar_fairness_aif360(df_original, y_true, y_pred, target, sensitive):
     dataset_true = BinaryLabelDataset(
         df=df.drop(columns=["prediction"]),
         label_names=[target],
-        protected_attribute_names=[sensitive]
+        protected_attribute_names=[sensitive],
     )
 
     df_pred = df.drop(columns=["prediction"]).copy()
@@ -38,19 +49,19 @@ def avaliar_fairness_aif360(df_original, y_true, y_pred, target, sensitive):
     dataset_pred = BinaryLabelDataset(
         df=df_pred,
         label_names=[target],
-        protected_attribute_names=[sensitive]
+        protected_attribute_names=[sensitive],
     )
 
     metric = ClassificationMetric(
         dataset_true,
         dataset_pred,
         unprivileged_groups=[{sensitive: 0}],
-        privileged_groups=[{sensitive: 1}]
+        privileged_groups=[{sensitive: 1}],
     )
 
     return {
-        "statistical_parity_difference": metric.statistical_parity_difference(),
-        "disparate_impact": metric.disparate_impact(),
-        "equal_opportunity_difference": metric.equal_opportunity_difference(),
-        "average_odds_difference": metric.average_odds_difference()
+        "statistical_parity_difference": _safe_float(metric.statistical_parity_difference()),
+        "disparate_impact": _safe_float(metric.disparate_impact()),
+        "equal_opportunity_difference": _safe_float(metric.equal_opportunity_difference()),
+        "average_odds_difference": _safe_float(metric.average_odds_difference()),
     }

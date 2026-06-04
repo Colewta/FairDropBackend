@@ -1,10 +1,15 @@
-from sklearn.linear_model import LogisticRegression
+﻿from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.metrics import (
-    accuracy_score, precision_score, recall_score,
-    f1_score, roc_auc_score, confusion_matrix
+    accuracy_score,
+    precision_score,
+    recall_score,
+    f1_score,
+    roc_auc_score,
+    confusion_matrix,
 )
+
 
 def treinar_modelo(tipo, X, y):
     if tipo == "logistic":
@@ -14,9 +19,9 @@ def treinar_modelo(tipo, X, y):
         model = RandomForestClassifier(
             n_estimators=100,
             min_samples_split=5,
-            random_state=42
+            random_state=42,
         )
-    
+
     elif tipo == "knn":
         model = KNeighborsClassifier(n_neighbors=min(5, len(X)))
 
@@ -36,11 +41,11 @@ def treinar_modelo(tipo, X, y):
             colsample_bytree=0.9,
             eval_metric="logloss",
             random_state=42,
-            n_jobs=-1
+            n_jobs=-1,
         )
 
     else:
-        raise ValueError("Modelo inválido")
+        raise ValueError("Modelo invalido")
 
     model.fit(X, y)
     return model
@@ -51,39 +56,31 @@ def avaliar_modelo(model, X, y):
 
     try:
         y_prob = model.predict_proba(X)[:, 1]
-        roc_auc = roc_auc_score(y, y_prob)
-    except:
+        roc_auc = float(roc_auc_score(y, y_prob))
+    except Exception:
         roc_auc = None
 
-    cm = confusion_matrix(y, y_pred)
+    cm = confusion_matrix(y, y_pred, labels=[0, 1])
 
     return {
-        "accuracy": accuracy_score(y, y_pred),
-        "precision": precision_score(y, y_pred, zero_division=0),
-        "recall": recall_score(y, y_pred, zero_division=0),
-        "f1": f1_score(y, y_pred, zero_division=0),
+        "accuracy": float(accuracy_score(y, y_pred)),
+        "precision": float(precision_score(y, y_pred, zero_division=0)),
+        "recall": float(recall_score(y, y_pred, zero_division=0)),
+        "f1": float(f1_score(y, y_pred, zero_division=0)),
         "roc_auc": roc_auc,
-        "confusion_matrix": cm.tolist()
+        "confusion_matrix": cm.tolist(),
     }, y_pred
-<<<<<<< HEAD
-=======
-    
+
+
 def extrair_importancia(model, feature_names):
-    importancias = {}
-
-    # Logistic Regression
     if hasattr(model, "coef_"):
-        coefs = model.coef_[0]
-        importancias = {
-            feature_names[i]: float(coefs[i])
-            for i in range(len(feature_names))
-        }
-
+        values = model.coef_[0]
     elif hasattr(model, "feature_importances_"):
-        importancias = {
-            feature_names[i]: float(model.feature_importances_[i])
-            for i in range(len(feature_names))
-        }
+        values = model.feature_importances_
+    else:
+        return {}
 
-    return importancias
->>>>>>> 14ee90717e59ecdfe7b40d518c7a047aca4aded3
+    return {
+        str(feature_names[index]): float(values[index])
+        for index in range(len(feature_names))
+    }

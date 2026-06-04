@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile, Form, HTTPException, Body
+﻿from fastapi import APIRouter, Body, File, Form, HTTPException, UploadFile
 import pandas as pd
 
 from app.utils.file_handler import salvar_csv
@@ -11,12 +11,13 @@ router = APIRouter()
 GLOBAL_MODEL = None
 GLOBAL_FEATURES = None
 
+
 @router.post("/train")
 async def train(
-    file: UploadFile,
+    file: UploadFile = File(...),
     target: str = Form(...),
     sensitive: str = Form(...),
-    model_type: str = Form(...)
+    model_type: str = Form(...),
 ):
     global GLOBAL_MODEL, GLOBAL_FEATURES
 
@@ -25,21 +26,22 @@ async def train(
 
         target = target.strip()
         sensitive = sensitive.strip()
+        model_type = model_type.strip()
 
         df = carregar_dataset(path)
 
         if target not in df.columns:
-            raise HTTPException(status_code=400, detail="Target inválido")
+            raise HTTPException(status_code=400, detail="Target invalido")
 
         if sensitive not in df.columns:
-            raise HTTPException(status_code=400, detail="Coluna sensível inválida")
+            raise HTTPException(status_code=400, detail="Coluna sensivel invalida")
 
         df_preparado, info_preprocessamento = preparar_dataframe(df, target)
 
         if sensitive not in df_preparado.columns:
             raise HTTPException(
                 status_code=400,
-                detail="Coluna sensível inválida após preprocessamento"
+                detail="Coluna sensivel invalida apos preprocessamento",
             )
 
         X_train, X_test, y_train, y_test = preprocessar(df_preparado, target)
@@ -58,7 +60,7 @@ async def train(
             y_test,
             y_pred,
             target,
-            sensitive
+            sensitive,
         )
 
         return {
@@ -70,24 +72,25 @@ async def train(
                 "total_linhas": len(df),
                 "linhas_apos_limpeza": info_preprocessamento["linhas_apos_limpeza"],
                 "treino": len(X_train),
-                "teste": len(X_test)
+                "teste": len(X_test),
             },
             "preprocessamento": {
-                "target_binarizado": info_preprocessamento["target_binarizado"]
-            }
+                "target_binarizado": info_preprocessamento["target_binarizado"],
+            },
         }
 
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
 
 @router.post("/simulate")
 def simulate(data: dict = Body(...)):
     global GLOBAL_MODEL, GLOBAL_FEATURES
 
     if GLOBAL_MODEL is None:
-        raise HTTPException(status_code=400, detail="Modelo não treinado")
+        raise HTTPException(status_code=400, detail="Modelo nao treinado")
 
     try:
         missing = set(GLOBAL_FEATURES) - set(data.keys())
@@ -95,7 +98,7 @@ def simulate(data: dict = Body(...)):
         if missing:
             raise HTTPException(
                 status_code=400,
-                detail=f"Faltando features: {list(missing)}"
+                detail=f"Faltando features: {list(missing)}",
             )
 
         df = pd.DataFrame([data])
@@ -103,10 +106,10 @@ def simulate(data: dict = Body(...)):
         prob = GLOBAL_MODEL.predict_proba(df)[0][1]
 
         return {
-            "probabilidade_evasao": float(prob)
+            "probabilidade_evasao": float(prob),
         }
 
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
