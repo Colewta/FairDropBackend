@@ -36,7 +36,7 @@ async def train(
         if sensitive not in df.columns:
             raise HTTPException(status_code=400, detail="Coluna sensivel invalida")
 
-        df_preparado, info_preprocessamento = preparar_dataframe(df, target)
+        df_preparado, info_preprocessamento = preparar_dataframe(df, target, sensitive)
 
         if sensitive not in df_preparado.columns:
             raise HTTPException(
@@ -76,11 +76,18 @@ async def train(
             },
             "preprocessamento": {
                 "target_binarizado": info_preprocessamento["target_binarizado"],
+                "target_classe_positiva": info_preprocessamento.get("target_classe_positiva"),
+                "target_estrategia": info_preprocessamento.get("target_estrategia"),
+                "sensitive_binarizado": info_preprocessamento.get("sensitive_binarizado"),
+                "sensitive_grupo_privilegiado": info_preprocessamento.get("sensitive_grupo_privilegiado"),
+                "sensitive_estrategia": info_preprocessamento.get("sensitive_estrategia"),
             },
         }
 
     except HTTPException:
         raise
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 

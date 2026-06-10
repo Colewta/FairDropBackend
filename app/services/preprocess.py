@@ -9,14 +9,39 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 
 
-POSITIVE_TARGET_LABELS = {
-    "1", "true", "t", "yes", "y", "sim", "s", "positivo", "positive",
-    "aprovado", "success", "sucesso", "dropout", "evadiu"
+# TIPOS DE ENTRADAS COMUNS EM TABELAS PARA LIDAR COM POSSÍVEIS DIFERENÇAS DE DADOS
+BOOLEAN_POSITIVE_LABELS = {
+    "1", "true", "t", "yes", "y", "sim", "s", "positivo", "positive"
 }
-NEGATIVE_TARGET_LABELS = {
-    "0", "false", "f", "no", "n", "nao", "negativo", "negative",
-    "reprovado", "fail", "falha", "graduate", "graduated", "enrolled",
-    "matriculado", "nao evadiu"
+BOOLEAN_NEGATIVE_LABELS = {
+    "0", "false", "f", "no", "n", "nao", "negativo", "negative"
+}
+TARGET_RISK_LABELS = {
+    "dropout", "evasao", "evadiu", "evadido", "abandonou", "desistente",
+    "churn", "default", "inadimplente", "fraude", "fraud", "risco", "risk"
+}
+TARGET_FAVORABLE_LABELS = {
+    "aprovado", "approved", "success", "sucesso", "graduate", "graduated",
+    "formado", "concluido", "pass", "passed", "admitido", "admitted",
+    "hired", "contratado", "paid", "quitado"
+}
+TARGET_NEGATIVE_LABELS = {
+    "reprovado", "rejected", "fail", "failed", "falha", "enrolled",
+    "matriculado", "suspended", "suspenso", "pending", "pendente",
+    "active", "ativo", "nao evadiu", "nao aprovado"
+}
+TARGET_POSITIVE_GROUPS = (
+    ("classe_de_risco_reconhecida", TARGET_RISK_LABELS),
+    ("classe_positiva_reconhecida", BOOLEAN_POSITIVE_LABELS | TARGET_FAVORABLE_LABELS),
+)
+SENSITIVE_PRIVILEGED_LABELS = {
+    "1", "true", "t", "yes", "y", "sim", "s", "male", "masculino",
+    "homem", "m", "white", "branco", "privileged", "privilegiado"
+}
+SENSITIVE_UNPRIVILEGED_LABELS = {
+    "0", "false", "f", "no", "n", "nao", "female", "feminino",
+    "mulher", "black", "preto", "negro", "pardo", "unprivileged",
+    "nao privilegiado"
 }
 NA_VALUES = [
     "", " ", "na", "n/a", "nan", "null", "none", "missing", "?", "-", "--",
@@ -26,7 +51,10 @@ NORMALIZED_NA_VALUES = set(NA_VALUES)
 CSV_ENCODINGS = ("utf-8", "utf-8-sig", "latin1", "cp1252", "iso-8859-1")
 CSV_SEPARATORS = (None, ",", ";", "\t", "|")
 NATIONALITY_COLUMNS = {"nacionality", "nationality", "nacionalidade"}
+MAX_CATEGORICAL_TARGET_CLASSES = 20
+CONTINUOUS_TARGET_UNIQUE_RATIO = 0.35
 
+# 
 def carregar_dataset(caminho):
     ultimo_erro = None
 
@@ -46,6 +74,7 @@ def carregar_dataset(caminho):
                 )
                 df = _limpar_dataframe_bruto(df)
 
+                # VERIFICA SE NÃO É UM ARQUIVO VAZIO
                 if not df.empty and len(df.columns) > 1:
                     return df
 
@@ -159,9 +188,9 @@ def _converter_booleanos(serie):
     mapa = {}
 
     for valor in serie_texto.dropna().unique():
-        if valor in POSITIVE_TARGET_LABELS:
+        if valor in BOOLEAN_POSITIVE_LABELS:
             mapa[valor] = 1
-        elif valor in NEGATIVE_TARGET_LABELS:
+        elif valor in BOOLEAN_NEGATIVE_LABELS:
             mapa[valor] = 0
 
     if not mapa:
@@ -241,6 +270,150 @@ def _binarizar_nacionalidade(df):
     return df
 
 
+def _formatar_valor_info(valor):
+    if isinstance(valor, (np.integer, int)):
+        return str(int(valor))
+    if isinstance(valor, (np.floating, float)):
+        numero = float(valor)
+        return str(int(numero)) if numero.is_integer() else str(numero)
+
+    return str(valor)
+
+
+def _montar_info_binarizacao(valores, mapa, estrategia, classe_positiva=None):
+    info = {
+        "classes_originais": [_formatar_valor_info(valor) for valor in valores],
+        "target_binarizado": {
+            _formatar_valor_info(valor): int(classe)
+            for valor, classe in mapa.items()
+        },
+        "estrategia": estrategia,
+    }
+
+    if classe_positiva is not None:
+        info["classe_positiva"] = _formatar_valor_info(classe_positiva)
+
+    return info
+
+
+def _classe_mais_frequente(valores, contagens):
+    return sorted(
+        valores,
+        key=lambda valor: (-contagens.get(valor, 0), _chave_texto(valor))
+    )[0]
+
+
+def _selecionar_por_grupos_texto(valores, contagens, grupos):
+    for estrategia, rotulos in grupos:
+        candidatos = [
+            valor for valor in valores
+            if _chave_texto(valor) in rotulos
+        ]
+
+        if candidatos:
+            return _classe_mais_frequente(candidatos, contagens), estrategia
+
+    return None, None
+
+
+def _selecionar_classe_positiva_texto(valores, contagens):
+    positivo, estrategia = _selecionar_por_grupos_texto(
+        valores,
+        contagens,
+        TARGET_POSITIVE_GROUPS,
+    )
+    if positivo is not None:
+        return positivo, estrategia
+
+    negativos = [
+        valor for valor in valores
+        if _chave_texto(valor) in (BOOLEAN_NEGATIVE_LABELS | TARGET_NEGATIVE_LABELS)
+    ]
+    if len(valores) == 2 and len(negativos) == 1:
+        negativo = negativos[0]
+        return next(valor for valor in valores if valor != negativo), "binario_classe_negativa_reconhecida"
+
+    if len(valores) == 2:
+        return sorted(valores, key=_chave_texto)[-1], "binario_texto_ordenado"
+
+    elegiveis = [valor for valor in valores if contagens.get(valor, 0) >= 2]
+    if not elegiveis:
+        elegiveis = valores
+
+    return _classe_mais_frequente(elegiveis, contagens), "multiclasse_classe_mais_frequente"
+
+
+def _parece_target_continuo(serie_numerica):
+    valores = serie_numerica.dropna().astype("float64")
+    total = len(valores)
+
+    if total == 0:
+        return False
+
+    quantidade_unicos = valores.nunique()
+    if quantidade_unicos <= 2:
+        return False
+
+    taxa_unicos = quantidade_unicos / max(total, 1)
+    fracao_decimais = (~np.isclose(valores, np.round(valores))).mean()
+
+    return (
+        quantidade_unicos > MAX_CATEGORICAL_TARGET_CLASSES
+        and taxa_unicos >= CONTINUOUS_TARGET_UNIQUE_RATIO
+    ) or (quantidade_unicos > 10 and fracao_decimais > 0.2)
+
+
+def _binarizar_target_numerico(serie_numerica, valores_numericos):
+    if len(valores_numericos) == 2:
+        menor, maior = valores_numericos
+        mapa = {menor: 0, maior: 1}
+        return serie_numerica.map(mapa), _montar_info_binarizacao(
+            valores_numericos,
+            mapa,
+            "binario_numerico",
+            maior,
+        )
+
+    if _parece_target_continuo(serie_numerica):
+        raise ValueError(
+            "A coluna target parece continua. Este fluxo usa classificacao binaria "
+            "para as metricas de fairness; escolha uma coluna categorica ou envie "
+            "o target ja agrupado em classes."
+        )
+
+    classe_positiva = max(valores_numericos)
+    mapa = {
+        valor: int(valor == classe_positiva)
+        for valor in valores_numericos
+    }
+    return serie_numerica.map(mapa), _montar_info_binarizacao(
+        valores_numericos,
+        mapa,
+        "multiclasse_numerico_maior_valor_vs_resto",
+        classe_positiva,
+    )
+
+
+def _binarizar_target_texto(serie, valores_unicos):
+    contagens = serie.dropna().value_counts().to_dict()
+    classe_positiva, estrategia = _selecionar_classe_positiva_texto(
+        valores_unicos,
+        contagens,
+    )
+    chave_positiva = _chave_texto(classe_positiva)
+    mapa = {
+        valor: int(_chave_texto(valor) == chave_positiva)
+        for valor in valores_unicos
+    }
+
+    return serie.map(mapa), _montar_info_binarizacao(
+        valores_unicos,
+        mapa,
+        estrategia,
+        classe_positiva,
+    )
+
+
 def _binarizar_target(serie_target):
     serie = serie_target.map(_normalizar_texto)
     serie_sem_nulos = serie.dropna()
@@ -254,51 +427,113 @@ def _binarizar_target(serie_target):
         errors="coerce"
     )
     valores_numericos = sorted(serie_numerica.dropna().unique().tolist())
-    if len(valores_numericos) == 2 and serie_numerica.notna().sum() == serie_sem_nulos.size:
-        menor, maior = valores_numericos
-        mapa = {menor: 0, maior: 1}
-        return serie_numerica.map(mapa).astype("int64"), {
-            "target_original": valores_numericos,
-            "target_binarizado": mapa
-        }
+    target_totalmente_numerico = serie_numerica.notna().sum() == serie_sem_nulos.size
 
-    if len(valores_unicos) == 2:
-        mapa = {}
-        for valor in valores_unicos:
-            chave = _chave_texto(valor)
-            if chave in POSITIVE_TARGET_LABELS:
-                mapa[valor] = 1
-            elif chave in NEGATIVE_TARGET_LABELS:
-                mapa[valor] = 0
+    if target_totalmente_numerico:
+        return _binarizar_target_numerico(serie_numerica, valores_numericos)
 
-        if len(mapa) != 2 or len(set(mapa.values())) == 1:
-            mapa = {valores_unicos[0]: 0, valores_unicos[1]: 1}
+    return _binarizar_target_texto(serie, valores_unicos)
 
-        return serie.map(mapa).astype("int64"), {
-            "target_original": valores_unicos,
-            "target_binarizado": mapa
-        }
 
-    positivos_encontrados = [
-        valor for valor in valores_unicos
-        if _chave_texto(valor) in POSITIVE_TARGET_LABELS
-    ]
-    if len(positivos_encontrados) == 1:
-        positivo = _chave_texto(positivos_encontrados[0])
-        mapa = {valor: int(_chave_texto(valor) == positivo) for valor in valores_unicos}
-        return serie.map(mapa).astype("int64"), {
-            "target_original": valores_unicos,
-            "target_binarizado": mapa
-        }
-
-    raise ValueError(
-        "A coluna target precisa ser binaria ou conter a classe 'Dropout' para binarizacao automatica."
+def _selecionar_grupo_privilegiado_texto(valores, contagens):
+    grupos = (
+        ("sensivel_grupo_privilegiado_reconhecido", SENSITIVE_PRIVILEGED_LABELS),
     )
+    privilegiado, estrategia = _selecionar_por_grupos_texto(valores, contagens, grupos)
+    if privilegiado is not None:
+        return privilegiado, estrategia
+
+    nao_privilegiados = [
+        valor for valor in valores
+        if _chave_texto(valor) in SENSITIVE_UNPRIVILEGED_LABELS
+    ]
+    if len(valores) == 2 and len(nao_privilegiados) == 1:
+        nao_privilegiado = nao_privilegiados[0]
+        return next(valor for valor in valores if valor != nao_privilegiado), "sensivel_grupo_nao_privilegiado_reconhecido"
+
+    if len(valores) == 2:
+        return sorted(valores, key=_chave_texto)[-1], "sensivel_binario_texto_ordenado"
+
+    return _classe_mais_frequente(valores, contagens), "sensivel_multiclasse_grupo_mais_frequente_vs_resto"
 
 
-def preparar_dataframe(df, target):
+def _binarizar_coluna_sensivel(serie_sensitive):
+    serie = serie_sensitive.map(_normalizar_texto)
+    serie_sem_nulos = serie.dropna()
+    valores_unicos = [valor for valor in serie_sem_nulos.unique().tolist() if valor != ""]
+
+    if len(valores_unicos) < 2:
+        raise ValueError("A coluna sensivel precisa ter pelo menos dois grupos validos.")
+
+    serie_numerica = pd.to_numeric(
+        serie.map(_normalizar_string_numerica),
+        errors="coerce"
+    )
+    valores_numericos = sorted(serie_numerica.dropna().unique().tolist())
+
+    if serie_numerica.notna().sum() == serie_sem_nulos.size:
+        if len(valores_numericos) == 2:
+            menor, maior = valores_numericos
+            mapa = {menor: 0, maior: 1}
+            return serie_numerica.map(mapa), {
+                "classes_originais": [_formatar_valor_info(valor) for valor in valores_numericos],
+                "sensitive_binarizado": {
+                    _formatar_valor_info(valor): int(classe)
+                    for valor, classe in mapa.items()
+                },
+                "grupo_privilegiado": _formatar_valor_info(maior),
+                "estrategia": "sensivel_binario_numerico",
+            }
+
+        contagens_numericas = serie_numerica.dropna().value_counts().to_dict()
+        grupo_privilegiado = sorted(
+            valores_numericos,
+            key=lambda valor: (-contagens_numericas.get(valor, 0), valor)
+        )[0]
+        mapa = {
+            valor: int(valor == grupo_privilegiado)
+            for valor in valores_numericos
+        }
+        return serie_numerica.map(mapa), {
+            "classes_originais": [_formatar_valor_info(valor) for valor in valores_numericos],
+            "sensitive_binarizado": {
+                _formatar_valor_info(valor): int(classe)
+                for valor, classe in mapa.items()
+            },
+            "grupo_privilegiado": _formatar_valor_info(grupo_privilegiado),
+            "estrategia": "sensivel_multiclasse_grupo_mais_frequente_vs_resto",
+        }
+
+    contagens = serie_sem_nulos.value_counts().to_dict()
+    grupo_privilegiado, estrategia = _selecionar_grupo_privilegiado_texto(
+        valores_unicos,
+        contagens,
+    )
+    chave_privilegiada = _chave_texto(grupo_privilegiado)
+    mapa = {
+        valor: int(_chave_texto(valor) == chave_privilegiada)
+        for valor in valores_unicos
+    }
+
+    return serie.map(mapa), {
+        "classes_originais": [_formatar_valor_info(valor) for valor in valores_unicos],
+        "sensitive_binarizado": {
+            _formatar_valor_info(valor): int(classe)
+            for valor, classe in mapa.items()
+        },
+        "grupo_privilegiado": _formatar_valor_info(grupo_privilegiado),
+        "estrategia": estrategia,
+    }
+
+
+def preparar_dataframe(df, target, sensitive=None):
     if target not in df.columns:
         raise ValueError("Target invalido")
+    if sensitive is not None:
+        if sensitive == target:
+            raise ValueError("Target e coluna sensivel precisam ser diferentes.")
+        if sensitive not in df.columns:
+            raise ValueError("Coluna sensivel invalida")
 
     df_preparado = _limpar_dataframe_bruto(df)
     df_preparado = _converter_colunas_numericas(df_preparado, target)
@@ -306,19 +541,46 @@ def preparar_dataframe(df, target):
     df_preparado = df_preparado.dropna(subset=[target])
 
     df_preparado[target], info_target = _binarizar_target(df_preparado[target])
+    df_preparado = df_preparado.dropna(subset=[target])
+    df_preparado[target] = df_preparado[target].astype("int64")
+
+    info_sensitive = None
+    if sensitive is not None:
+        df_preparado[sensitive], info_sensitive = _binarizar_coluna_sensivel(
+            df_preparado[sensitive]
+        )
+        df_preparado = df_preparado.dropna(subset=[sensitive])
+        df_preparado[sensitive] = df_preparado[sensitive].astype("int64")
+
     df_preparado = _imputar_valores_ausentes(df_preparado, target)
     df_preparado = df_preparado.reset_index(drop=True)
 
     contagem_classes = df_preparado[target].value_counts()
     if len(contagem_classes) < 2:
         raise ValueError("A coluna target precisa ter pelo menos duas classes validas.")
+    if contagem_classes.min() < 2:
+        raise ValueError(
+            "Apos a binarizacao, cada classe do target precisa ter pelo menos "
+            "dois registros para separar treino e teste com seguranca."
+        )
     if len(df_preparado) < 3:
         raise ValueError("Dataset insuficiente apos o preprocessamento.")
 
-    return df_preparado, {
+    info_preprocessamento = {
         "linhas_apos_limpeza": len(df_preparado),
-        "target_binarizado": info_target["target_binarizado"]
+        "target_binarizado": info_target["target_binarizado"],
+        "target_classe_positiva": info_target.get("classe_positiva"),
+        "target_estrategia": info_target.get("estrategia"),
     }
+
+    if info_sensitive is not None:
+        info_preprocessamento.update({
+            "sensitive_binarizado": info_sensitive["sensitive_binarizado"],
+            "sensitive_grupo_privilegiado": info_sensitive["grupo_privilegiado"],
+            "sensitive_estrategia": info_sensitive["estrategia"],
+        })
+
+    return df_preparado, info_preprocessamento
 
 
 def _imputar_valores_ausentes(df, target):
