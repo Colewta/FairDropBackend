@@ -1,17 +1,63 @@
-﻿from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.neighbors import KNeighborsClassifier
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
     accuracy_score,
+    confusion_matrix,
+    f1_score,
     precision_score,
     recall_score,
-    f1_score,
     roc_auc_score,
-    confusion_matrix,
 )
+from sklearn.neighbors import KNeighborsClassifier
+
+
+MODEL_SPECS = {
+    "logistic": {
+        "nome": "Logistic Regression",
+        "aliases": {"logistic", "logreg", "logistic_regression"},
+    },
+    "rf": {
+        "nome": "Random Forest",
+        "aliases": {"rf", "random_forest", "randomforest"},
+    },
+    "knn": {
+        "nome": "KNN",
+        "aliases": {"knn", "k_nearest_neighbors"},
+    },
+    "xgboost": {
+        "nome": "XGBoost",
+        "aliases": {"xgboost", "xgb"},
+    },
+}
+MODEL_ALIASES = {
+    alias: tipo
+    for tipo, spec in MODEL_SPECS.items()
+    for alias in spec["aliases"]
+}
+
+
+def listar_modelos_suportados():
+    return {
+        tipo: spec["nome"]
+        for tipo, spec in MODEL_SPECS.items()
+    }
+
+
+def normalizar_tipo_modelo(tipo):
+    tipo_normalizado = MODEL_ALIASES.get(str(tipo or "").strip().lower())
+    if tipo_normalizado is None:
+        raise ValueError("Modelo invalido")
+
+    return tipo_normalizado
+
+
+def obter_nome_modelo(tipo):
+    return MODEL_SPECS[normalizar_tipo_modelo(tipo)]["nome"]
 
 
 def treinar_modelo(tipo, X, y):
+    tipo = normalizar_tipo_modelo(tipo)
+
     if tipo == "logistic":
         model = LogisticRegression(max_iter=1000)
 
@@ -23,9 +69,9 @@ def treinar_modelo(tipo, X, y):
         )
 
     elif tipo == "knn":
-        model = KNeighborsClassifier(n_neighbors=min(5, len(X)))
+        model = KNeighborsClassifier(n_neighbors=max(1, min(5, len(X))))
 
-    elif tipo in ("xgboost", "xgb"):
+    elif tipo == "xgboost":
         try:
             from xgboost import XGBClassifier
         except ImportError as exc:
@@ -49,6 +95,21 @@ def treinar_modelo(tipo, X, y):
 
     model.fit(X, y)
     return model
+
+
+def treinar_todos_modelos(X, y, tipos=None):
+    tipos_modelos = tipos or MODEL_SPECS.keys()
+    modelos = {}
+    erros = {}
+
+    for tipo in tipos_modelos:
+        tipo_normalizado = normalizar_tipo_modelo(tipo)
+        try:
+            modelos[tipo_normalizado] = treinar_modelo(tipo_normalizado, X, y)
+        except Exception as exc:
+            erros[tipo_normalizado] = str(exc)
+
+    return modelos, erros
 
 
 def avaliar_modelo(model, X, y):

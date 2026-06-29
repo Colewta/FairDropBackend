@@ -53,9 +53,22 @@ CSV_SEPARATORS = (None, ",", ";", "\t", "|")
 NATIONALITY_COLUMNS = {"nacionality", "nationality", "nacionalidade"}
 MAX_CATEGORICAL_TARGET_CLASSES = 20
 CONTINUOUS_TARGET_UNIQUE_RATIO = 0.35
+MAX_RECOMMENDED_SENSITIVE_CLASSES = 12
+MAX_COLUMN_EXAMPLES = 5
+TARGET_COLUMN_KEYWORDS = {
+    "target", "label", "class", "classe", "resultado", "status", "outcome",
+    "desfecho", "evasao", "dropout", "churn", "fraude", "fraud", "default",
+    "inadimplencia", "inadimplente", "risco", "risk", "aprovacao", "approved",
+}
+SENSITIVE_COLUMN_KEYWORDS = {
+    "sensitive", "sexo", "sex", "gender", "genero", "raca", "race", "cor",
+    "etnia", "ethnicity", "nationality", "nacionalidade", "nacionality",
+    "religiao", "religion", "deficiencia", "disability", "pcd",
+    "estado civil", "marital", "marital_status",
+}
 
 # 
-def carregar_dataset(caminho):
+def carregar_dataset(caminho, return_metadata=False):
     ultimo_erro = None
 
     for encoding in CSV_ENCODINGS:
@@ -72,10 +85,16 @@ def carregar_dataset(caminho):
                     na_values=NA_VALUES,
                     keep_default_na=True
                 )
-                df = _limpar_dataframe_bruto(df)
+                df, info_carga = _limpar_dataframe_bruto(df, return_metadata=True)
 
                 # VERIFICA SE NÃO É UM ARQUIVO VAZIO
                 if not df.empty and len(df.columns) > 1:
+                    if return_metadata:
+                        info_carga.update({
+                            "encoding_utilizado": encoding,
+                            "separador_utilizado": sep if sep is not None else "auto",
+                        })
+                        return df, info_carga
                     return df
 
                 ultimo_erro = ValueError("CSV vazio ou com apenas uma coluna reconhecida.")
@@ -117,9 +136,18 @@ def _chave_texto(valor):
     return texto
 
 
-def _limpar_dataframe_bruto(df):
+def _limpar_dataframe_bruto(df, return_metadata=False):
     df = df.copy()
-    df.columns = _normalizar_colunas(df.columns)
+    linhas_originais = len(df)
+    colunas_originais = len(df.columns)
+    nomes_originais = list(df.columns)
+    nomes_normalizados = _normalizar_colunas(df.columns)
+    df.columns = nomes_normalizados
+    colunas_renomeadas = sum(
+        1
+        for original, normalizada in zip(nomes_originais, nomes_normalizados)
+        if _limpar_nome_coluna(original) != normalizada
+    )
 
     colunas_vazias = [
         col for col in df.columns
@@ -129,8 +157,24 @@ def _limpar_dataframe_bruto(df):
         df = df.drop(columns=colunas_vazias)
 
     df = df.replace(r"^\s*$", pd.NA, regex=True)
-    df = df.dropna(axis=0, how="all").dropna(axis=1, how="all")
+    linhas_vazias = int(df.isna().all(axis=1).sum())
+    df = df.dropna(axis=0, how="all")
+    colunas_totalmente_vazias = int(df.isna().all(axis=0).sum())
+    df = df.dropna(axis=1, how="all")
     df = df.reset_index(drop=True)
+
+    info = {
+        "linhas_originais": linhas_originais,
+        "colunas_originais": colunas_originais,
+        "linhas_vazias_removidas": linhas_vazias,
+        "colunas_vazias_removidas": len(colunas_vazias) + colunas_totalmente_vazias,
+        "colunas_renomeadas": colunas_renomeadas,
+        "linhas_finais": len(df),
+        "colunas_finais": len(df.columns),
+    }
+
+    if return_metadata:
+        return df, info
 
     return df
 
@@ -278,6 +322,245 @@ def _formatar_valor_info(valor):
         return str(int(numero)) if numero.is_integer() else str(numero)
 
     return str(valor)
+
+
+def _extrair_exemplos_valores(serie, limite=MAX_COLUMN_EXAMPLES):
+    exemplos = []
+
+    for valor in serie.dropna().unique().tolist():
+        exemplos.append(_formatar_valor_info(valor))
+        if len(exemplos) >= limite:
+            break
+
+    return exemplos
+
+
+def _inferir_tipo_coluna(serie):
+    if pd.api.types.is_numeric_dtype(serie):
+        if serie.dropna().nunique() == 2:
+            return "binaria_numerica"
+        return "numerica"
+
+    serie_normalizada = serie.map(_normalizar_texto)
+    serie_bool = _converter_booleanos(serie_normalizada)
+    if serie_bool is not None:
+        return "binaria_textual"
+
+    serie_data = _converter_datas(serie_normalizada)
+    if serie_data is not None:
+        return "data"
+
+    quantidade_unicos = serie_normalizada.dropna().nunique()
+    if quantidade_unicos == 2:
+        return "categorica_binaria"
+    if quantidade_unicos <= MAX_CATEGORICAL_TARGET_CLASSES:
+        return "categorica"
+
+    return "texto_livre"
+
+
+def _coluna_parece_continua(serie):
+    serie_normalizada = pd.to_numeric(
+        serie.map(_normalizar_string_numerica),
+        errors="coerce",
+    )
+    serie_sem_nulos = serie_normalizada.dropna()
+
+    if serie_sem_nulos.empty:
+        return False
+
+    return _parece_target_continuo(serie_sem_nulos)
+
+
+def _nome_tem_palavra_chave(nome, palavras_chave):
+    nome_normalizado = _chave_texto(nome)
+    return any(palavra in nome_normalizado for palavra in palavras_chave)
+
+
+def _coluna_tem_rotulos(serie, rotulos):
+    serie_normalizada = serie.map(_normalizar_texto).dropna()
+    if serie_normalizada.empty:
+        return False
+
+    return any(_chave_texto(valor) in rotulos for valor in serie_normalizada.unique().tolist())
+
+
+def _analisar_candidata_target(nome_coluna, serie):
+    score = 0
+    motivos = []
+    quantidade_unicos = int(serie.dropna().nunique())
+    taxa_ausentes = float(serie.isna().mean())
+
+    if _nome_tem_palavra_chave(nome_coluna, TARGET_COLUMN_KEYWORDS):
+        score += 5
+        motivos.append("nome da coluna sugere um desfecho")
+
+    if 2 <= quantidade_unicos <= MAX_CATEGORICAL_TARGET_CLASSES:
+        score += 3
+        motivos.append("cardinalidade compativel com classificacao")
+
+    if quantidade_unicos == 2:
+        score += 3
+        motivos.append("coluna binaria")
+
+    if _coluna_tem_rotulos(
+        serie,
+        BOOLEAN_POSITIVE_LABELS
+        | BOOLEAN_NEGATIVE_LABELS
+        | TARGET_RISK_LABELS
+        | TARGET_FAVORABLE_LABELS
+        | TARGET_NEGATIVE_LABELS,
+    ):
+        score += 2
+        motivos.append("valores lembram classes de target")
+
+    if taxa_ausentes <= 0.2:
+        score += 1
+        motivos.append("baixa taxa de valores ausentes")
+
+    if _coluna_parece_continua(serie):
+        score -= 4
+        motivos.append("parece continua para o fluxo atual de classificacao")
+
+    return {
+        "coluna": nome_coluna,
+        "score": score,
+        "motivos": motivos,
+        "valores_exemplo": _extrair_exemplos_valores(serie),
+        "quantidade_unicos": quantidade_unicos,
+        "taxa_ausentes": round(taxa_ausentes, 4),
+    }
+
+
+def _analisar_candidata_sensitive(nome_coluna, serie):
+    score = 0
+    motivos = []
+    quantidade_unicos = int(serie.dropna().nunique())
+    taxa_ausentes = float(serie.isna().mean())
+
+    if _nome_tem_palavra_chave(nome_coluna, SENSITIVE_COLUMN_KEYWORDS):
+        score += 5
+        motivos.append("nome da coluna sugere atributo sensivel")
+
+    if 2 <= quantidade_unicos <= MAX_RECOMMENDED_SENSITIVE_CLASSES:
+        score += 3
+        motivos.append("quantidade de grupos adequada para analise de fairness")
+
+    if quantidade_unicos == 2:
+        score += 2
+        motivos.append("coluna binaria ou facilmente binarizavel")
+
+    if _coluna_tem_rotulos(
+        serie,
+        BOOLEAN_POSITIVE_LABELS
+        | BOOLEAN_NEGATIVE_LABELS
+        | SENSITIVE_PRIVILEGED_LABELS
+        | SENSITIVE_UNPRIVILEGED_LABELS,
+    ):
+        score += 2
+        motivos.append("valores lembram grupos sensiveis conhecidos")
+
+    if taxa_ausentes <= 0.2:
+        score += 1
+        motivos.append("baixa taxa de valores ausentes")
+
+    if quantidade_unicos > MAX_CATEGORICAL_TARGET_CLASSES and not _nome_tem_palavra_chave(
+        nome_coluna,
+        {"idade", "age"},
+    ):
+        score -= 2
+        motivos.append("tem muitos grupos distintos para o fluxo atual")
+
+    return {
+        "coluna": nome_coluna,
+        "score": score,
+        "motivos": motivos,
+        "valores_exemplo": _extrair_exemplos_valores(serie),
+        "quantidade_unicos": quantidade_unicos,
+        "taxa_ausentes": round(taxa_ausentes, 4),
+    }
+
+
+def analisar_dataset(df, info_carga=None):
+    info_carga = info_carga or {}
+    perfis_colunas = []
+    candidatos_target = []
+    candidatos_sensitive = []
+
+    for coluna in df.columns:
+        serie = df[coluna]
+        perfil = {
+            "coluna": coluna,
+            "tipo_inferido": _inferir_tipo_coluna(serie),
+            "valores_ausentes": int(serie.isna().sum()),
+            "taxa_ausentes": round(float(serie.isna().mean()), 4),
+            "valores_unicos": int(serie.dropna().nunique()),
+            "valores_exemplo": _extrair_exemplos_valores(serie),
+        }
+        perfis_colunas.append(perfil)
+        candidatos_target.append(_analisar_candidata_target(coluna, serie))
+        candidatos_sensitive.append(_analisar_candidata_sensitive(coluna, serie))
+
+    candidatos_target.sort(key=lambda item: (-item["score"], item["coluna"].lower()))
+    candidatos_sensitive.sort(key=lambda item: (-item["score"], item["coluna"].lower()))
+
+    target_recomendado = candidatos_target[0] if candidatos_target and candidatos_target[0]["score"] > 0 else None
+    sensitive_recomendado = None
+    for candidato in candidatos_sensitive:
+        if candidato["score"] <= 0:
+            continue
+        if target_recomendado and candidato["coluna"] == target_recomendado["coluna"]:
+            continue
+        sensitive_recomendado = candidato
+        break
+
+    resumo = {
+        "registros_encontrados": int(info_carga.get("linhas_finais", len(df))),
+        "colunas_encontradas": int(info_carga.get("colunas_finais", len(df.columns))),
+        "linhas_vazias_removidas": int(info_carga.get("linhas_vazias_removidas", 0)),
+        "colunas_vazias_removidas": int(info_carga.get("colunas_vazias_removidas", 0)),
+        "colunas_renomeadas": int(info_carga.get("colunas_renomeadas", 0)),
+        "linhas_duplicadas": int(df.duplicated().sum()),
+        "celulas_ausentes": int(df.isna().sum().sum()),
+        "colunas_com_ausentes": int((df.isna().sum() > 0).sum()),
+        "colunas_numericas": int(sum(pd.api.types.is_numeric_dtype(df[col]) for col in df.columns)),
+        "colunas_nao_numericas": int(sum(not pd.api.types.is_numeric_dtype(df[col]) for col in df.columns)),
+    }
+
+    mensagens = [
+        f"{resumo['registros_encontrados']} registros e {resumo['colunas_encontradas']} colunas foram carregados.",
+        f"{resumo['celulas_ausentes']} valores ausentes e {resumo['linhas_duplicadas']} linhas duplicadas foram identificados.",
+    ]
+
+    if target_recomendado is not None:
+        mensagens.append(
+            f"Target recomendado: {target_recomendado['coluna']}."
+        )
+    else:
+        mensagens.append(
+            "Nenhum target forte foi identificado automaticamente; procure uma coluna de desfecho ou label."
+        )
+
+    if sensitive_recomendado is not None:
+        mensagens.append(
+            f"Sensitive recomendado: {sensitive_recomendado['coluna']}."
+        )
+    else:
+        mensagens.append(
+            "Nenhuma coluna sensivel forte foi encontrada automaticamente; revise sexo, raca, nacionalidade ou grupos equivalentes."
+        )
+
+    return {
+        "resumo": resumo,
+        "recomendacoes": {
+            "target_recomendado": target_recomendado,
+            "sensitive_recomendado": sensitive_recomendado,
+            "top_targets": candidatos_target[:3],
+            "top_sensitive": candidatos_sensitive[:3],
+            "mensagens": mensagens,
+        },
+        "colunas": perfis_colunas,
+    }
 
 
 def _montar_info_binarizacao(valores, mapa, estrategia, classe_positiva=None):
@@ -538,20 +821,28 @@ def preparar_dataframe(df, target, sensitive=None):
     df_preparado = _limpar_dataframe_bruto(df)
     df_preparado = _converter_colunas_numericas(df_preparado, target)
     df_preparado = _binarizar_nacionalidade(df_preparado)
+    linhas_apos_limpeza = len(df_preparado)
+    linhas_descartadas_target_nulo = int(df_preparado[target].isna().sum())
     df_preparado = df_preparado.dropna(subset=[target])
 
     df_preparado[target], info_target = _binarizar_target(df_preparado[target])
+    linhas_descartadas_target_invalido = int(df_preparado[target].isna().sum())
     df_preparado = df_preparado.dropna(subset=[target])
     df_preparado[target] = df_preparado[target].astype("int64")
 
     info_sensitive = None
+    linhas_descartadas_sensitive_nulo = 0
     if sensitive is not None:
         df_preparado[sensitive], info_sensitive = _binarizar_coluna_sensivel(
             df_preparado[sensitive]
         )
+        linhas_descartadas_sensitive_nulo = int(df_preparado[sensitive].isna().sum())
         df_preparado = df_preparado.dropna(subset=[sensitive])
         df_preparado[sensitive] = df_preparado[sensitive].astype("int64")
 
+    valores_ausentes_antes_imputacao = int(
+        df_preparado.drop(columns=[target], errors="ignore").isna().sum().sum()
+    )
     df_preparado = _imputar_valores_ausentes(df_preparado, target)
     df_preparado = df_preparado.reset_index(drop=True)
 
@@ -567,10 +858,19 @@ def preparar_dataframe(df, target, sensitive=None):
         raise ValueError("Dataset insuficiente apos o preprocessamento.")
 
     info_preprocessamento = {
-        "linhas_apos_limpeza": len(df_preparado),
+        "linhas_apos_limpeza": linhas_apos_limpeza,
+        "linhas_finais": len(df_preparado),
+        "linhas_descartadas_target_nulo": linhas_descartadas_target_nulo,
+        "linhas_descartadas_target_invalido": linhas_descartadas_target_invalido,
+        "linhas_descartadas_sensitive_nulo": linhas_descartadas_sensitive_nulo,
+        "valores_ausentes_preenchidos": valores_ausentes_antes_imputacao,
         "target_binarizado": info_target["target_binarizado"],
         "target_classe_positiva": info_target.get("classe_positiva"),
         "target_estrategia": info_target.get("estrategia"),
+        "distribuicao_target": {
+            str(chave): int(valor)
+            for chave, valor in contagem_classes.to_dict().items()
+        },
     }
 
     if info_sensitive is not None:
@@ -608,6 +908,11 @@ def preprocessar(df, target):
 
     X = pd.get_dummies(X, dummy_na=False)
     X = X.replace([np.inf, -np.inf], np.nan).fillna(0)
+    info_features = {
+        "features_originais": int(df.shape[1] - 1),
+        "features_apos_encoding": int(X.shape[1]),
+        "colunas_modelo": X.columns.tolist(),
+    }
 
     contagem_classes = y.value_counts()
     estratificar = y if contagem_classes.min() >= 2 else None
@@ -630,4 +935,4 @@ def preprocessar(df, target):
         index=X_test.index
     )
 
-    return X_train, X_test, y_train, y_test
+    return X_train, X_test, y_train, y_test, info_features

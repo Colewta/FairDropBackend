@@ -14,6 +14,28 @@ def _safe_float(value):
     return number if math.isfinite(number) else None
 
 
+def calcular_score_fairness(metricas):
+    componentes = []
+
+    for chave in (
+        "statistical_parity_difference",
+        "equal_opportunity_difference",
+        "average_odds_difference",
+    ):
+        valor = _safe_float(metricas.get(chave))
+        if valor is not None:
+            componentes.append(max(0.0, 1.0 - abs(valor)))
+
+    disparate_impact = _safe_float(metricas.get("disparate_impact"))
+    if disparate_impact is not None:
+        componentes.append(max(0.0, 1.0 - abs(1.0 - disparate_impact)))
+
+    if not componentes:
+        return None
+
+    return round(sum(componentes) / len(componentes), 4)
+
+
 def avaliar_fairness_aif360(df_original, y_true, y_pred, target, sensitive):
     df = df_original.copy()
 
@@ -59,9 +81,12 @@ def avaliar_fairness_aif360(df_original, y_true, y_pred, target, sensitive):
         privileged_groups=[{sensitive: 1}],
     )
 
-    return {
+    metricas = {
         "statistical_parity_difference": _safe_float(metric.statistical_parity_difference()),
         "disparate_impact": _safe_float(metric.disparate_impact()),
         "equal_opportunity_difference": _safe_float(metric.equal_opportunity_difference()),
         "average_odds_difference": _safe_float(metric.average_odds_difference()),
     }
+    metricas["fairness_score"] = calcular_score_fairness(metricas)
+
+    return metricas
