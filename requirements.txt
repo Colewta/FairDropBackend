@@ -7,7 +7,7 @@ scipy==1.15.3
 
 scikit-learn==1.8.0
 fairlearn==0.13.0
-aif360[all]
+aif360
 xgboost
 
 python-multipart==0.0.24
