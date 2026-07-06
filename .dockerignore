@@ -3,6 +3,16 @@ __pycache__/
 *.pyo
 *.pyd
 .pytest_cache/
+
 .venv/
 venv/
+
 data/
+uploads/
+
+.git/
+.gitignore
+
+.env
+
+README.md
