@@ -6,11 +6,29 @@ services:
     container_name: fairdrop-backend
     environment:
       FRONTEND_ORIGINS: "http://localhost:5173,http://127.0.0.1:5173,http://localhost:8080,http://127.0.0.1:8080"
+      FAIRDROP_API_TOKEN: "${FAIRDROP_API_TOKEN:-}"
+      FAIRDROP_INSTITUTION_ID: "${FAIRDROP_INSTITUTION_ID:-local}"
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     volumes:
       - backend_uploads:/app/data/uploads
+      - backend_platform:/app/data/platform
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      start_period: 60s
+      retries: 5
+  frontend:
+    build: ../Frontend
+    ports:
+      - "127.0.0.1:8080:80"
+    depends_on:
+      backend:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:
   backend_uploads:
+  backend_platform:

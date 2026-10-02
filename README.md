@@ -1,92 +1,50 @@
 # FairDrop Backend
 
-API do FairDrop responsável por analisar datasets em CSV, treinar modelos de classificação e retornar métricas de desempenho e fairness para consumo do frontend. A pasta `data` contém a base de dados recomendada para ser usada para testes no sistema, porém, qualquer base de dados relacionada a evasão que seja `.csv` poderá ser utilizada.
+API FastAPI com leitura de bases, AutoML, avaliação AIF360, explicações SHAP,
+modelos persistentes e histórico de previsões. O [guia principal](../README.md)
+explica o fluxo completo, configurações, critérios metodológicos e endpoints.
 
-## Visão Geral
+## Executar localmente
 
-O backend foi projetado para rodar em contêiner Docker. Essa é a forma prevista de execução do projeto neste momento e deve ser mantida dessa maneira.
-
-Ao subir o serviço, a API FastAPI fica disponível na porta `8000` e expõe, entre outras, as seguintes rotas:
-
-- `GET /health`: verificação simples de funcionamento da API.
-- `POST /analyze`: análise inicial do dataset enviado em CSV.
-- `POST /train`: treinamento e comparação dos modelos disponíveis.
-- `POST /simulate`: simulação com base no modelo treinado em memória.
-- `GET /docs`: documentação interativa gerada pelo FastAPI.
-
-## Pré-requisitos
-
-- Docker (`https://docs.docker.com/desktop/setup/install/windows-install/` para Windows)
-- Docker Compose
-
-## Como Executar
-
-No diretório `FairDropBackend`, execute:
-
-```bash
-docker compose up --build
+```powershell
+py -3.12 -m venv venv
+.\venv\Scripts\python.exe -m pip install -r requirements.txt
+.\venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --no-access-log
 ```
 
-Se preferir rodar em segundo plano:
+API: http://localhost:8000 · documentação: http://localhost:8000/docs.
+Copie `.env.example` para `.env` caso queira configurar armazenamento, limites
+ou chave de acesso. Dois modelos fictícios de `demo_assets` são instalados no
+primeiro início. São artefatos reais e funcionam sem rede ou treinamento prévio.
 
-```bash
-docker compose up --build -d
+## Docker
+
+Nesta pasta: `docker compose up --build -d` executa somente a API.
+Na raiz FairDrop: `docker compose up --build -d` executa a aplicação completa.
+Volumes preservam o banco e os modelos entre reinícios. AIF360 é instalado sem
+extras `[all]`; não há dependência de R/rpy2.
+
+## Testar
+
+```powershell
+.\venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+.\venv\Scripts\python.exe -m pytest tests -q
+.\venv\Scripts\python.exe -m compileall -q app
 ```
 
-Após a inicialização, a API estará disponível em:
+Testes cobrem leitura, heurísticas, pipeline, seleção, fairness, calibração,
+persistência, inferência, SHAP, exemplos prontos e compatibilidade. As bases
+locais são verificadas por `test_project_datasets.py` quando presentes.
+O banco de testes é isolado. O volume de desenvolvimento fica em `data/platform`.
 
-- `http://localhost:8000`
-- `http://localhost:8000/docs`
-- `http://localhost:8000/health`
+## Organização
 
-## Configuração Atual
+- `app/routes`: análise, datasets, treino, modelos, predições e demonstração.
+- `app/schemas`: contratos Pydantic.
+- `app/services`: serviços independentes de análise, ML, fairness e armazenamento.
+- `app/core/config.py`: configurações e pesos explícitos.
+- `demo_assets`: modelos e arquivos fictícios distribuídos.
+- `scripts/build_demo.py`: reprodução dos exemplos com versões atuais.
 
-O `docker-compose.yml` já está preparado para:
-
-- publicar a API na porta `8000`;
-- permitir acesso do frontend local nas portas `5173` e `8080`;
-- persistir uploads no volume Docker `backend_uploads`;
-- reiniciar o contêiner automaticamente com `unless-stopped`.
-
-## Comandos Úteis
-
-Subir o backend:
-
-```bash
-docker compose up --build
-```
-
-Parar os serviços:
-
-```bash
-docker compose down
-```
-
-Visualizar logs:
-
-```bash
-docker compose logs -f backend
-```
-
-Remover contêineres e volume persistido:
-
-```bash
-docker compose down -v
-```
-
-Use `down -v` apenas quando quiser limpar também os arquivos persistidos no volume do Docker.
-
-## Integração com o Frontend
-
-O frontend do projeto não deve ser executado em Docker neste momento. A arquitetura atual é:
-
-- backend em Docker;
-- frontend local com `npm install` e `npm run dev`.
-
-Com essa configuração, o frontend em desenvolvimento acessa a API em `http://localhost:8000`.
-
-## Observações
-
-- Sempre execute os comandos a partir da pasta `FairDropBackend`.
-- Se houver alteração no código Python ou nas dependências, reconstrua o serviço com `docker compose up --build`.
-- Caso o frontend seja exposto em outra origem além das já previstas, será necessário ajustar a variável `FRONTEND_ORIGINS` no `docker-compose.yml`.
+Use um worker; os jobs em segundo plano são locais ao processo, sem fila
+distribuída. Consulte [detalhes da importação](DATASET_ANALYSIS.md).

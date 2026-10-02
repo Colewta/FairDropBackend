@@ -1,0 +1,347 @@
+{
+  "mitigation": {
+    "method": "none",
+    "status": "not_requested",
+    "selected": false,
+    "features": [],
+    "algorithm": null,
+    "message": "Nenhum experimento de reponderação foi solicitado.",
+    "before_metrics": null,
+    "after_metrics": null,
+    "before_fairness": null,
+    "after_fairness": null,
+    "weight_summary": {},
+    "warnings": []
+  },
+  "is_demo": true,
+  "id": "8200852168f54954a63376129d02c063",
+  "institution_id": "demo",
+  "version": "2.1",
+  "name": "Exemplo pronto · comparação de risco",
+  "created_at": "2026-09-23T15:45:35.317953+00:00",
+  "dataset_id": "403e3a55638d5fcea165ce9e750993c8",
+  "dataset_name": "Histórico fictício de demonstração",
+  "target": "situacao",
+  "positive_class": "Evadido",
+  "classes": [
+    "Ativo",
+    "Evadido"
+  ],
+  "features": [
+    "frequencia",
+    "media",
+    "reprovacoes",
+    "acessos_semanais",
+    "curso"
+  ],
+  "feature_schema": {
+    "frequencia": "numeric",
+    "media": "numeric",
+    "reprovacoes": "numeric",
+    "acessos_semanais": "numeric",
+    "curso": "categorical"
+  },
+  "excluded_features": [
+    "matricula",
+    "sexo",
+    "situacao"
+  ],
+  "sensitive_features": [
+    "sexo"
+  ],
+  "identifier_column": "matricula",
+  "algorithm": "rf",
+  "threshold": 0.5,
+  "risk_thresholds": {
+    "low": 0.3,
+    "medium": 0.7
+  },
+  "config": {
+    "mitigation": "none",
+    "mitigation_features": [],
+    "dataset_id": "403e3a55638d5fcea165ce9e750993c8",
+    "target": "situacao",
+    "positive_class": "Evadido",
+    "target_rule": null,
+    "name": "Exemplo pronto · comparação de risco",
+    "sensitive_features": [
+      "sexo"
+    ],
+    "reference_groups": {},
+    "identifier_column": "matricula",
+    "prediction_features": null,
+    "allow_sensitive_features": false,
+    "reviewed_leakage": [],
+    "strategy": "best_balanced",
+    "algorithms": [
+      "rf"
+    ],
+    "selection_weights": null,
+    "threshold": 0.5,
+    "low_risk_max": 0.3,
+    "medium_risk_max": 0.7,
+    "calibrate": false,
+    "cv_folds": 0,
+    "balance_classes": true
+  },
+  "metrics": {
+    "accuracy": 0.7638888888888888,
+    "precision": 0.8235294117647058,
+    "recall": 0.717948717948718,
+    "f1": 0.7671232876712328,
+    "roc_auc": 0.8616938616938616,
+    "pr_auc": 0.8316559876018879,
+    "specificity": 0.8181818181818182,
+    "balanced_accuracy": 0.7680652680652681,
+    "brier_score": 0.15684368664123485,
+    "confusion_matrix": [
+      [
+        27,
+        6
+      ],
+      [
+        11,
+        28
+      ]
+    ],
+    "calibration_curve": [
+      {
+        "predicted": 0.12020891126208287,
+        "observed": 0.0
+      },
+      {
+        "predicted": 0.22184249973671744,
+        "observed": 0.1111111111111111
+      },
+      {
+        "predicted": 0.3341940769009887,
+        "observed": 0.4444444444444444
+      },
+      {
+        "predicted": 0.427853475760522,
+        "observed": 0.4444444444444444
+      },
+      {
+        "predicted": 0.5336699258779719,
+        "observed": 0.7777777777777778
+      },
+      {
+        "predicted": 0.7113736303407192,
+        "observed": 0.6666666666666666
+      },
+      {
+        "predicted": 0.8271689641547763,
+        "observed": 1.0
+      },
+      {
+        "predicted": 0.8895844883883969,
+        "observed": 0.8888888888888888
+      }
+    ]
+  },
+  "fairness": {
+    "status": "attention",
+    "comparisons": [
+      {
+        "group_rates": {
+          "alert_rate": 0.5,
+          "recall": 0.8,
+          "false_positive_rate": 0.16666666666666666,
+          "false_negative_rate": 0.19999999999999996,
+          "actual_positive_count": 20.0,
+          "actual_negative_count": 18.0
+        },
+        "reference_rates": {
+          "alert_rate": 0.4411764705882353,
+          "recall": 0.631578947368421,
+          "false_positive_rate": 0.2,
+          "false_negative_rate": 0.368421052631579,
+          "actual_positive_count": 19.0,
+          "actual_negative_count": 15.0
+        },
+        "feature": "sexo",
+        "group": "Masculino",
+        "reference": "Feminino",
+        "group_count": 38,
+        "reference_count": 34,
+        "metrics": {
+          "statistical_parity_difference": 0.05882352941176472,
+          "disparate_impact": 1.1333333333333333,
+          "equal_opportunity_difference": 0.16842105263157903,
+          "average_odds_difference": 0.06754385964912284,
+          "fairness_score": 0.893
+        },
+        "status": "attention",
+        "explanation": "Diferenças entre grupos exigem revisão do contexto e da amostra; os critérios não certificam justiça."
+      }
+    ],
+    "warnings": [
+      "sexo: referência descritiva = grupo mais frequente no treino; não significa privilégio social."
+    ],
+    "score": 0.893,
+    "semantics": "Resultado positivo representa a classe de risco confirmada; disparidade não prova discriminação."
+  },
+  "comparison": [
+    {
+      "variant": "baseline",
+      "algorithm": "rf",
+      "validation": {
+        "accuracy": 0.6944444444444444,
+        "precision": 0.7297297297297297,
+        "recall": 0.6923076923076923,
+        "f1": 0.7105263157894737,
+        "roc_auc": 0.8127428127428127,
+        "pr_auc": 0.8534747833489049,
+        "specificity": 0.696969696969697,
+        "balanced_accuracy": 0.6946386946386947,
+        "brier_score": 0.173619664658645,
+        "confusion_matrix": [
+          [
+            23,
+            10
+          ],
+          [
+            12,
+            27
+          ]
+        ],
+        "calibration_curve": [
+          {
+            "predicted": 0.09545119060133328,
+            "observed": 0.1111111111111111
+          },
+          {
+            "predicted": 0.21487406567012632,
+            "observed": 0.1111111111111111
+          },
+          {
+            "predicted": 0.37548486809371995,
+            "observed": 0.6666666666666666
+          },
+          {
+            "predicted": 0.48003816226053364,
+            "observed": 0.4444444444444444
+          },
+          {
+            "predicted": 0.5583121431222533,
+            "observed": 0.3333333333333333
+          },
+          {
+            "predicted": 0.6897763111214991,
+            "observed": 0.8888888888888888
+          },
+          {
+            "predicted": 0.773821997152909,
+            "observed": 0.7777777777777778
+          },
+          {
+            "predicted": 0.8695611931736599,
+            "observed": 1.0
+          }
+        ]
+      },
+      "fairness": {
+        "status": "attention",
+        "comparisons": [
+          {
+            "group_rates": {
+              "alert_rate": 0.6052631578947368,
+              "recall": 0.6956521739130435,
+              "false_positive_rate": 0.4666666666666667,
+              "false_negative_rate": 0.30434782608695654,
+              "actual_positive_count": 23.0,
+              "actual_negative_count": 15.0
+            },
+            "reference_rates": {
+              "alert_rate": 0.4117647058823529,
+              "recall": 0.6875,
+              "false_positive_rate": 0.16666666666666666,
+              "false_negative_rate": 0.3125,
+              "actual_positive_count": 16.0,
+              "actual_negative_count": 18.0
+            },
+            "feature": "sexo",
+            "group": "Masculino",
+            "reference": "Feminino",
+            "group_count": 38,
+            "reference_count": 34,
+            "metrics": {
+              "statistical_parity_difference": 0.19349845201238391,
+              "disparate_impact": 1.4699248120300752,
+              "equal_opportunity_difference": 0.008152173913043459,
+              "average_odds_difference": 0.15407608695652175,
+              "fairness_score": 0.7936
+            },
+            "status": "attention",
+            "explanation": "Diferenças entre grupos exigem revisão do contexto e da amostra; os critérios não certificam justiça."
+          }
+        ],
+        "warnings": [
+          "sexo: referência descritiva = grupo mais frequente no treino; não significa privilégio social."
+        ],
+        "score": 0.7936,
+        "semantics": "Resultado positivo representa a classe de risco confirmada; disparidade não prova discriminação."
+      },
+      "score": 0.7809391380444092,
+      "score_components": {
+        "recall": 0.6923076923076923,
+        "roc_auc": 0.8127428127428127,
+        "pr_auc": 0.8534747833489049,
+        "fairness": 0.7936,
+        "calibration": 0.826380335341355
+      },
+      "effective_weights": {
+        "recall": 0.3,
+        "roc_auc": 0.2,
+        "pr_auc": 0.15,
+        "fairness": 0.2,
+        "calibration": 0.15
+      },
+      "cross_validation": {}
+    }
+  ],
+  "failed_algorithms": {},
+  "feature_importance": {
+    "numeric__frequencia": 0.39130664557863826,
+    "numeric__media": 0.32241585814636725,
+    "numeric__reprovacoes": 0.07515095113730841,
+    "numeric__acessos_semanais": 0.16756969444856581,
+    "categorical__curso_Administração": 0.012736860592309952,
+    "categorical__curso_Pedagogia": 0.015372306753215407,
+    "categorical__curso_Tecnologia": 0.015447683343594896
+  },
+  "explanation": {
+    "reference_rows": null,
+    "context_version": 0,
+    "status": "available",
+    "method": "SHAP permutation",
+    "base_value": null,
+    "probability": null,
+    "factors": [],
+    "global_importance": {
+      "frequencia": 0.22480273149050667,
+      "media": 0.09594959407111861,
+      "reprovacoes": 0.03936271272475304,
+      "acessos_semanais": 0.07679615391905703,
+      "curso": 0.026775951385622807
+    },
+    "message": "Média do impacto absoluto em 16 exemplos de treino. Aproximação SHAP, sem interpretação causal."
+  },
+  "split": {
+    "train": 216,
+    "validation": 72,
+    "test": 72
+  },
+  "warnings": [
+    "Modelo demonstrativo treinado exclusivamente com dados fictícios. Use para aprender o fluxo, não para decisões reais.",
+    "0 registros duplicados ou sem resultado removidos.",
+    "Pesos de classe ativados em Logistic Regression, Random Forest e XGBoost; KNN não suporta essa opção."
+  ],
+  "limitations": [
+    "Probabilidade estimada a partir de dados históricos; não é certeza nem diagnóstico.",
+    "SHAP explica o comportamento do modelo, não causalidade.",
+    "Fairness depende dos grupos, tamanhos de amostra e contexto; limiares não certificam justiça.",
+    "Divisão aleatória por aluno; valide também em um período futuro antes de uso operacional.",
+    "Uma única instituição por instalação. A decisão requer revisão humana."
+  ]
+}

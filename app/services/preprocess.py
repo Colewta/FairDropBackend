@@ -261,7 +261,7 @@ def _converter_datas(serie):
     if taxa_convertida < 0.8:
         return None
 
-    convertido_numerico = convertido.view("int64").astype("float64") / 1_000_000_000
+    convertido_numerico = convertido.astype("datetime64[ns]").astype("int64").astype("float64") / 1_000_000_000
     convertido_numerico[convertido.isna()] = np.nan
 
     return convertido_numerico

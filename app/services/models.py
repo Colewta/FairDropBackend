@@ -55,21 +55,22 @@ def obter_nome_modelo(tipo):
     return MODEL_SPECS[normalizar_tipo_modelo(tipo)]["nome"]
 
 
-def treinar_modelo(tipo, X, y):
+def criar_modelo(tipo, n_samples=100, balanced=False):
     tipo = normalizar_tipo_modelo(tipo)
 
     if tipo == "logistic":
-        model = LogisticRegression(max_iter=1000)
+        model = LogisticRegression(max_iter=1000, random_state=42, class_weight="balanced" if balanced else None)
 
     elif tipo == "rf":
         model = RandomForestClassifier(
             n_estimators=100,
             min_samples_split=5,
             random_state=42,
+            class_weight="balanced" if balanced else None,
         )
 
     elif tipo == "knn":
-        model = KNeighborsClassifier(n_neighbors=max(1, min(5, len(X))))
+        model = KNeighborsClassifier(n_neighbors=max(1, min(5, n_samples)))
 
     elif tipo == "xgboost":
         try:
@@ -87,12 +88,17 @@ def treinar_modelo(tipo, X, y):
             colsample_bytree=0.9,
             eval_metric="logloss",
             random_state=42,
-            n_jobs=-1,
+            n_jobs=2,
         )
 
     else:
         raise ValueError("Modelo invalido")
 
+    return model
+
+
+def treinar_modelo(tipo, X, y):
+    model = criar_modelo(tipo, len(X))
     model.fit(X, y)
     return model
 
